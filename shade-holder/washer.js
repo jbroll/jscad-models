@@ -9,16 +9,16 @@ const { translate, rotateX, rotateZ } = require('@jscad/modeling').transforms
 
 
 function main() {
-  const hole = 7;
-  const squareSide = 11;
+  const hole = 11.5;
+  const squareSide = 12.5;
   const squareDepth = 3;
-  const wellDia = 12;
+  const wellDia = 11;
   const wellDepth = 2;
   const washerDia = 25;
 
   const wall = 1;
 
-  return subtract(
+  return rotateX(rad(180), subtract(
     union(
       cylinder({ outer: washerDia/2, inner: wellDia/2, segments: 128,
                  height: 1.75 }),
@@ -26,10 +26,10 @@ function main() {
                  height: 0.5,
                  center: [0, 0, -1.75/2] }),
       cuboid({ size: [squareSide, squareSide, squareDepth],
-             center: [0, 0, -2]})
+             center: [0, 0, -2.25]})
       ),
-      cylinder({ radius: hole/2, height: 7 })
-  )
+      cylinder({ radius: hole/2, height: 10 })
+  ))
 }
 
 module.exports = { main }
