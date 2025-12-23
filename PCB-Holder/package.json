@@ -1,0 +1,20 @@
+{
+  "name": "@jscad-models/pcb-holder",
+  "version": "1.0.0",
+  "description": "JSCAD PCB holder with configurable standoffs",
+  "main": "pcb-holder.js",
+  "files": [
+    "pcb-holder.js",
+    "standoff.js"
+  ],
+  "keywords": [
+    "jscad",
+    "pcb",
+    "holder",
+    "3d-printing"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@jbroll/jscad-fluent": "*"
+  }
+}

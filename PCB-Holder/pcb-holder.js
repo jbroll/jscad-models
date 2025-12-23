@@ -1,81 +1,93 @@
 const jf = require('@jbroll/jscad-fluent')
+const standoff = require('./standoff')
+const lego = require('https://raw.githubusercontent.com/jbroll/LEGO.js/master/lego.js')
 
 function main(params) {
-    params._type = 'PCB Dimensions'
-    params.pcbWidth = { default: 50, min: 10, max: 200, step: 1, label: 'PCB Width' }
-    params.pcbLength = { default: 70, min: 10, max: 200, step: 1, label: 'PCB Length' }
-    params.holeInset = { default: 3, min: 1, max: 20, step: 0.5, label: 'Hole Inset from Edge' }
-
-    params._type = 'Standoff'
-    params.standoffHeight = { default: 8, min: 2, max: 30, step: 0.5, label: 'Standoff Height' }
-    params.standoffRadius = { default: 4, min: 2, max: 15, step: 0.5, label: 'Standoff Radius' }
-
-    params._type = 'Post Tip'
-    params.postRadius = { default: 1.5, min: 0.5, max: 5, step: 0.1, label: 'Post Radius' }
-    params.postHeight = { default: 3, min: 1, max: 10, step: 0.5, label: 'Post Height' }
-    params.splitWidth = { default: 0.8, min: 0.3, max: 2, step: 0.1, label: 'Split Width' }
-    params.splitDepth = { default: 2, min: 0.5, max: 8, step: 0.5, label: 'Split Depth' }
-
-    params._type = 'Base Plate'
-    params.basePlate = { default: true, label: 'Include Base Plate' }
-    params.baseThickness = { default: 2, min: 1, max: 5, step: 0.5, label: 'Base Thickness' }
-
-    // Create a single standoff with split-top post
-    const standoff = createStandoff(params)
-
-    // Calculate corner positions
-    const halfWidth = (params.pcbWidth - 2 * params.holeInset) / 2
-    const halfLength = (params.pcbLength - 2 * params.holeInset) / 2
-
-    // Place standoffs at four corners
-    const standoffs = jf.union(
-        standoff.translate([halfWidth, halfLength, 0]),
-        standoff.translate([-halfWidth, halfLength, 0]),
-        standoff.translate([-halfWidth, -halfLength, 0]),
-        standoff.translate([halfWidth, -halfLength, 0])
-    )
-
-    if (params.basePlate) {
-        const base = jf.roundedRectangle({
-            size: [params.pcbWidth, params.pcbLength],
-            roundRadius: 2,
-            segments: 16
-        }).extrudeLinear({ height: params.baseThickness })
-
-        return standoffs.translateZ(params.baseThickness).union(base)
+    params._type = 'Part Selection'
+    params.part = {
+        type: 'choice',
+        default: 'assembled',
+        values: ['basePlate', 'assembled', 'standoff'],
+        captions: ['Base Plate', 'Assembled', 'Standoff']
     }
 
-    return standoffs
+    params._type = 'Standoff Positions'
+    params.standoffSpacingX = { default: 44, min: 5, max: 200, step: 1, label: 'X Spacing (center to center)' }
+    params.standoffSpacingY = { default: 64, min: 5, max: 200, step: 1, label: 'Y Spacing (center to center)' }
+
+    standoff.defineParams(params)
+
+    params.base._type = 'Base Plate'
+    params.base.width = { default: 6, min: 1, max: 32, step: 1, label: 'Width (studs)' }
+    params.base.length = { default: 8, min: 1, max: 32, step: 1, label: 'Length (studs)' }
+    params.base.type = {
+        type: 'choice',
+        default: 'baseplate',
+        values: ['brick', 'tile', 'baseplate'],
+        captions: ['Brick', 'Tile', 'Baseplate']
+    }
+    params.base.height = {
+        type: 'choice',
+        default: 1,
+        values: [0.333333, 0.5, 1, 2, 3, 4, 5, 6],
+        captions: ['1/3', '1/2', '1', '2', '3', '4', '5', '6']
+    }
+    params.base.studType = {
+        type: 'choice',
+        default: 'solid',
+        values: ['solid', 'hollow'],
+        captions: ['Solid', 'Hollow']
+    }
+    params.base.segments = { default: 64, min: 16, max: 128, step: 16, label: 'Segments' }
+
+    if (params.part === 'basePlate') {
+        return createBasePlate(params)
+    }
+    if (params.part === 'standoff') {
+        return standoff.createStandoff(params.standoff)
+    }
+
+    // assembled: show all 4 standoffs with base plate
+    return createAssembled(params)
 }
 
-function createStandoff(params) {
-    // Main standoff body
-    const body = jf.cylinder({
-        radius: params.standoffRadius,
-        height: params.standoffHeight
-    }).translateZ(params.standoffHeight / 2)
+function createBasePlate(params) {
+    return lego.block({
+        type: params.base.type,
+        width: params.base.width,
+        length: params.base.length,
+        height: params.base.height,
+        studType: params.base.studType,
+        segments: params.base.segments
+    })
+}
 
-    // Post tip that goes through PCB hole
-    const post = jf.cylinder({
-        radius: params.postRadius,
-        height: params.postHeight
-    }).translateZ(params.standoffHeight + params.postHeight / 2)
+// LEGO height constants (mm per unit)
+const BASEPLATE_HEIGHT = 1.3
+const BLOCK_HEIGHT = 9.6
 
-    // Rounded top on the post (slightly wider for snap fit)
-    const topRadius = params.postRadius * 1.2
-    const top = jf.sphere({
-        radius: topRadius,
-        segments: 16
-    }).translateZ(params.standoffHeight + params.postHeight)
+function createAssembled(params) {
+    const base = createBasePlate(params)
 
-    // Split slot through the post tip (allows flex for snap-fit)
-    const splitHeight = params.splitDepth + topRadius
-    const split = jf.cuboid({
-        size: [params.splitWidth, params.postRadius * 3, splitHeight]
-    }).translateZ(params.standoffHeight + params.postHeight - params.splitDepth / 2 + topRadius / 2)
+    // Calculate actual base height based on type
+    const heightUnit = params.base.type === 'baseplate' ? BASEPLATE_HEIGHT : BLOCK_HEIGHT
+    const baseHeight = params.base.height * heightUnit
 
-    // Combine body, post, and top, then subtract the split
-    return body.union(post, top).subtract(split)
+    const standoffPart = standoff.createStandoff(params.standoff)
+
+    // Half the spacing for positioning from center
+    const halfX = params.standoffSpacingX / 2
+    const halfY = params.standoffSpacingY / 2
+
+    // Place standoffs at four corners, raised above base plate
+    const standoffs = jf.union(
+        standoffPart.translate([halfX, halfY, baseHeight]),
+        standoffPart.translate([-halfX, halfY, baseHeight]),
+        standoffPart.translate([-halfX, -halfY, baseHeight]),
+        standoffPart.translate([halfX, -halfY, baseHeight])
+    )
+
+    return jf.union(base, standoffs)
 }
 
 module.exports = { main }
